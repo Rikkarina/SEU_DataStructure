@@ -1,236 +1,236 @@
-//#include <iostream>
-//#include <fstream>
-//#include <vector>
-//#include <algorithm>
-//#include <string>
-//#include <queue>
-//#include <limits>
-//#include <thread>
-//#include <mutex>
-//#include <filesystem>
-//#include <condition_variable>
-//#include <semaphore> 
-//#include "LoserTree.h"
-//
-//const int numLeaves = 80000;
-//const int blockSize = 30000;  // »º´æÇø´óĞ¡
-//
-//using namespace std;
-//namespace fs = std::filesystem;
-//
-//queue<int> buffer[3];
-//
-//// Êä³öÍ³¼ÆÓÃ
-//int runSum = 0;
-//int totalSum = 0;
-//int runIndex = 0;
-//string outputDir = "runs";  // ´æ´¢Ë³´®ÎÄ¼şµÄÄ¿Â¼
-//
-//// ¼ÇÂ¼¿ÉÓÃbuffer
-//queue<int> inputIndex, outputIndex, availableIndex;
-//
-//// ¶àÏß³ÌÓÃ
-//mutex availablemtx;
-//mutex inputmtx;
-//mutex outputmtx;
-//condition_variable cv_avail;
-//condition_variable cv_input;
-//condition_variable cv_output;
-//
-//// ÊäÈë»º³åÇø¶ÁÈ¡Êı¾İ
-//void readDataBlock(ifstream& inputFile) {
-//    unique_lock<mutex> lock(availablemtx);
-//
-//    while (true) {
-//        cv_avail.wait(lock, [] { return !availableIndex.empty(); });
-//        int key = availableIndex.front();
-//        availableIndex.pop();
-//
-//        int value;
-//        while (buffer[key].size() < blockSize && inputFile >> value) {
-//            buffer[key].push(value);
-//        }
-//        if (buffer[key].size() < blockSize) {
-//            if(buffer[key].size())inputIndex.push(key);
-//            inputIndex.push(-1);
-//            // cout << key << "buffer,inputÊ±ÈİÁ¿Îª£º" << buffer[key].size() << endl;
-//            cv_input.notify_one();
-//
-//            break;
-//        }
-//        inputIndex.push(key);
-//        // cout << key << "buffer,inputÊ±ÈİÁ¿Îª£º" << buffer[key].size() << endl;
-//        cv_input.notify_one();
-//    }
-//}
-//
-//// Êä³ö»º³åÇøÊä³öÊı¾İ
-//void writeDataBlock(queue<int>& data, const string& fileName) {
-//
-//    ofstream outputFile(fileName, ios::app);
-//    int lastValue = INT_MIN;
-//    if (!outputFile.is_open()) {
-//        cerr << "ÎŞ·¨´ò¿ªÊä³öÎÄ¼ş: " << fileName << endl;
-//        return;
-//    }
-//
-//    while (data.size()) {
-//        int value = data.front();
-//        
-//        if (lastValue > value) {
-//            cout << "Éú³ÉË³´®ÎÄ¼ş: " << fileName << "£¬ÊäÈë " << runSum << " ÌõÊı¾İ¡£" << endl;
-//            totalSum += runSum;
-//            runSum = 0;
-//            runIndex++;
-//            break;
-//        }
-//        data.pop();
-//
-//        outputFile << value << endl;
-//        runSum++;
-//        lastValue = value;
-//    }
-//    outputFile.close();
-//}
-//
-//void writeDataOut() {
-//    unique_lock<mutex> lock(outputmtx);
-//
-//    cv_output.wait(lock, [] {return !outputIndex.empty(); });
-//    int key = outputIndex.front();
-//    outputIndex.pop();
-//
-//    while (key != -1) {
-//        string outputFileName = outputDir + "/run_" + to_string(runIndex) + ".txt";
-//
-//        // cout << key << "buffer,ÕæÅÅ³öÈ¥Ê±ÈİÁ¿Îª£º" << buffer[key].size() << endl;
-//        writeDataBlock(buffer[key], outputFileName);
-//        if (!buffer[key].empty())continue;
-//        availableIndex.push(key);
-//        cv_avail.notify_one();
-//
-//        cv_output.wait(lock, [] {return !outputIndex.empty(); });
-//        key = outputIndex.front();
-//        outputIndex.pop();
-//    }
-//    string outputFileName = outputDir + "/run_" + to_string(runIndex) + ".txt";
-//    cout << "Éú³ÉË³´®ÎÄ¼ş: " << outputFileName << "£¬ÊäÈë " << runSum << " ÌõÊı¾İ¡£" << endl;
-//    totalSum += runSum;
-//}
-//
-//// Éú³É³õÊ¼Ë³´®²¢±£´æµ½¶à¸öÎÄ¼şÖĞ
-//void generateInitialRuns() {
-//    unique_lock<mutex> lock(inputmtx);
-//    cv_input.wait(lock, [] {return !inputIndex.empty(); });
-//    int key = inputIndex.front();
-//    inputIndex.pop();
-//
-//    if (key == -1) {
-//        // cerr << "ÊäÈëÎÄ¼şÎª¿Õ»òÊı¾İ²»×ãÒÔÌîÂú³õÊ¼¿é¡£" << endl;
-//        return;
-//    }
-//
-//    LoserTree loserTree(numLeaves,buffer[key]);
-//
-//    // ³õÊ¼»¯£¬ÔÙÌîÂú
-//    if (!loserTree.isReady()) {
-//        availableIndex.push(key);
-//        cv_avail.notify_one();
-//
-//        cv_input.wait(lock, [] {return !inputIndex.empty(); });
-//        key = inputIndex.front();
-//        inputIndex.pop();
-//
-//        while (key != -1) {
-//            bool tag = loserTree.fillLeaves(buffer[key]);
-//            if (tag)break;
-//            else {
-//                availableIndex.push(key);
-//                cv_avail.notify_one();
-//
-//                cv_input.wait(lock, [] {return !inputIndex.empty(); });
-//                key = inputIndex.front();
-//                inputIndex.pop();
-//            }
-//        }
-//    }
-//    
-//
-//    while(true) {
-//        // ÂúÊ÷
-//        buffer[key].push(loserTree.popMax());
-//
-//        for (int i = 0; i < buffer[key].size() - 1; i++) { // ´æÒÉ
-//            int value = buffer[key].front();
-//            buffer[key].pop();
-//            loserTree.insert(value);
-//            buffer[key].push(loserTree.popMax());
-//        }
-//        // È±¶¥
-//        outputIndex.push(key);
-//        // cout << key << "buffer,ouputÊ±ÈİÁ¿Îª£º"<< buffer[key].size() << endl;
-//        cv_output.notify_one();
-//
-//        cv_input.wait(lock, [] {return !inputIndex.empty(); });
-//        key = inputIndex.front();
-//        inputIndex.pop();
-//        if (key == -1)break; // ±íÊ¾ËùÓĞÊı¾İ¾ù¶ÁÍê
-//
-//        // Ìí¼ÓÊı¾İ£¬±ä³ÉÂúÊ÷
-//        int value = buffer[key].front();
-//        buffer[key].pop();
-//        loserTree.insert(value);
-//    }
-//
-//
-//    // ½«Ê£ÓàÊı¾İ¼·³öÀ´
-//    unique_lock<mutex> availLock(availablemtx);
-//    cv_avail.wait(availLock, [] {return !availableIndex.empty(); });
-//    key = availableIndex.front();
-//    availableIndex.pop();
-//
-//    for (int i = 0; i < numLeaves - 1; i++) {
-//        loserTree.insert(INT_MAX, false);
-//
-//        buffer[key].push(loserTree.popMax());
-//
-//        if (buffer[key].size() == blockSize) {
-//            outputIndex.push(key);
-//            // cout << key << "buffer,ouputÊ±ÈİÁ¿Îª£º" << buffer[key].size() << endl;
-//            cv_output.notify_one();
-//
-//            cv_avail.wait(lock, [] {return !availableIndex.empty(); });
-//            key = availableIndex.front();
-//            availableIndex.pop();
-//        }
-//    }
-//    outputIndex.push(key);
-//    // cout << key << "buffer,ouputÊ±ÈİÁ¿Îª£º" << buffer[key].size() << endl;
-//    outputIndex.push(-1);
-//}
-//
-//int main() {
-//    string inputFileName = "large_data.txt";  // ÊäÈëÊı¾İÎÄ¼şÃû
-//    ifstream inputFile(inputFileName);
-//    if (!inputFile.is_open()) {
-//        cerr << "ÎŞ·¨´ò¿ªÊäÈëÎÄ¼ş: " << inputFileName << endl;
-//        return 0;
-//    }
-//    fs::remove_all(outputDir);  
-//    fs::create_directory(outputDir);
-//    for(int i = 0;i < 3;i++)
-//        availableIndex.push(i);
-//
-//
-//    vector<thread> threads(3);
-//    threads[0] = thread(readDataBlock, ref(inputFile));
-//    threads[1] = thread(generateInitialRuns);
-//    threads[2] = thread(writeDataOut);
-//
-//    for (auto& t : threads) {
-//        t.join();
-//    }
-//
-//    cout << "Ë³´®Éú³ÉÍê³É£¬×Ü¹²Éú³ÉÁË " << runIndex + 1 << " ¸öË³´®ÎÄ¼ş¡£" << "¹²" << totalSum << "ÌõÊı¾İ" << endl;
-//    return 0;
-//}
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <algorithm>
+#include <string>
+#include <queue>
+#include <limits>
+#include <thread>
+#include <mutex>
+#include <filesystem>
+#include <condition_variable>
+#include <semaphore> 
+#include "LoserTree.h"
+
+const int numLeaves = 80000;
+const int blockSize = 30000;  // ç¼“å­˜åŒºå¤§å°
+
+using namespace std;
+namespace fs = std::filesystem;
+
+queue<int> buffer[3];
+
+// è¾“å‡ºç»Ÿè®¡ç”¨
+int runSum = 0;
+int totalSum = 0;
+int runIndex = 0;
+string outputDir = "runs";  // å­˜å‚¨é¡ºä¸²æ–‡ä»¶çš„ç›®å½•
+
+// è®°å½•å¯ç”¨buffer
+queue<int> inputIndex, outputIndex, availableIndex;
+
+// å¤šçº¿ç¨‹ç”¨
+mutex availablemtx;
+mutex inputmtx;
+mutex outputmtx;
+condition_variable cv_avail;
+condition_variable cv_input;
+condition_variable cv_output;
+
+// è¾“å…¥ç¼“å†²åŒºè¯»å–æ•°æ®
+void readDataBlock(ifstream& inputFile) {
+   unique_lock<mutex> lock(availablemtx);
+
+   while (true) {
+       cv_avail.wait(lock, [] { return !availableIndex.empty(); });
+       int key = availableIndex.front();
+       availableIndex.pop();
+
+       int value;
+       while (buffer[key].size() < blockSize && inputFile >> value) {
+           buffer[key].push(value);
+       }
+       if (buffer[key].size() < blockSize) {
+           if(buffer[key].size())inputIndex.push(key);
+           inputIndex.push(-1);
+           // cout << key << "buffer,inputæ—¶å®¹é‡ä¸ºï¼š" << buffer[key].size() << endl;
+           cv_input.notify_one();
+
+           break;
+       }
+       inputIndex.push(key);
+       // cout << key << "buffer,inputæ—¶å®¹é‡ä¸ºï¼š" << buffer[key].size() << endl;
+       cv_input.notify_one();
+   }
+}
+
+// è¾“å‡ºç¼“å†²åŒºè¾“å‡ºæ•°æ®
+void writeDataBlock(queue<int>& data, const string& fileName) {
+
+   ofstream outputFile(fileName, ios::app);
+   int lastValue = INT_MIN;
+   if (!outputFile.is_open()) {
+       cerr << "æ— æ³•æ‰“å¼€è¾“å‡ºæ–‡ä»¶: " << fileName << endl;
+       return;
+   }
+
+   while (data.size()) {
+       int value = data.front();
+       
+       if (lastValue > value) {
+           cout << "ç”Ÿæˆé¡ºä¸²æ–‡ä»¶: " << fileName << "ï¼Œè¾“å…¥ " << runSum << " æ¡æ•°æ®ã€‚" << endl;
+           totalSum += runSum;
+           runSum = 0;
+           runIndex++;
+           break;
+       }
+       data.pop();
+
+       outputFile << value << endl;
+       runSum++;
+       lastValue = value;
+   }
+   outputFile.close();
+}
+
+void writeDataOut() {
+   unique_lock<mutex> lock(outputmtx);
+
+   cv_output.wait(lock, [] {return !outputIndex.empty(); });
+   int key = outputIndex.front();
+   outputIndex.pop();
+
+   while (key != -1) {
+       string outputFileName = outputDir + "/run_" + to_string(runIndex) + ".txt";
+
+       // cout << key << "buffer,çœŸæ’å‡ºå»æ—¶å®¹é‡ä¸ºï¼š" << buffer[key].size() << endl;
+       writeDataBlock(buffer[key], outputFileName);
+       if (!buffer[key].empty())continue;
+       availableIndex.push(key);
+       cv_avail.notify_one();
+
+       cv_output.wait(lock, [] {return !outputIndex.empty(); });
+       key = outputIndex.front();
+       outputIndex.pop();
+   }
+   string outputFileName = outputDir + "/run_" + to_string(runIndex) + ".txt";
+   cout << "ç”Ÿæˆé¡ºä¸²æ–‡ä»¶: " << outputFileName << "ï¼Œè¾“å…¥ " << runSum << " æ¡æ•°æ®ã€‚" << endl;
+   totalSum += runSum;
+}
+
+// ç”Ÿæˆåˆå§‹é¡ºä¸²å¹¶ä¿å­˜åˆ°å¤šä¸ªæ–‡ä»¶ä¸­
+void generateInitialRuns() {
+   unique_lock<mutex> lock(inputmtx);
+   cv_input.wait(lock, [] {return !inputIndex.empty(); });
+   int key = inputIndex.front();
+   inputIndex.pop();
+
+   if (key == -1) {
+       // cerr << "è¾“å…¥æ–‡ä»¶ä¸ºç©ºæˆ–æ•°æ®ä¸è¶³ä»¥å¡«æ»¡åˆå§‹å—ã€‚" << endl;
+       return;
+   }
+
+   LoserTree loserTree(numLeaves,buffer[key]);
+
+   // åˆå§‹åŒ–ï¼Œå†å¡«æ»¡
+   if (!loserTree.isReady()) {
+       availableIndex.push(key);
+       cv_avail.notify_one();
+
+       cv_input.wait(lock, [] {return !inputIndex.empty(); });
+       key = inputIndex.front();
+       inputIndex.pop();
+
+       while (key != -1) {
+           bool tag = loserTree.fillLeaves(buffer[key]);
+           if (tag)break;
+           else {
+               availableIndex.push(key);
+               cv_avail.notify_one();
+
+               cv_input.wait(lock, [] {return !inputIndex.empty(); });
+               key = inputIndex.front();
+               inputIndex.pop();
+           }
+       }
+   }
+   
+
+   while(true) {
+       // æ»¡æ ‘
+       buffer[key].push(loserTree.popMax());
+
+       for (int i = 0; i < buffer[key].size() - 1; i++) { // å­˜ç–‘
+           int value = buffer[key].front();
+           buffer[key].pop();
+           loserTree.insert(value);
+           buffer[key].push(loserTree.popMax());
+       }
+       // ç¼ºé¡¶
+       outputIndex.push(key);
+       // cout << key << "buffer,ouputæ—¶å®¹é‡ä¸ºï¼š"<< buffer[key].size() << endl;
+       cv_output.notify_one();
+
+       cv_input.wait(lock, [] {return !inputIndex.empty(); });
+       key = inputIndex.front();
+       inputIndex.pop();
+       if (key == -1)break; // è¡¨ç¤ºæ‰€æœ‰æ•°æ®å‡è¯»å®Œ
+
+       // æ·»åŠ æ•°æ®ï¼Œå˜æˆæ»¡æ ‘
+       int value = buffer[key].front();
+       buffer[key].pop();
+       loserTree.insert(value);
+   }
+
+
+   // å°†å‰©ä½™æ•°æ®æŒ¤å‡ºæ¥
+   unique_lock<mutex> availLock(availablemtx);
+   cv_avail.wait(availLock, [] {return !availableIndex.empty(); });
+   key = availableIndex.front();
+   availableIndex.pop();
+
+   for (int i = 0; i < numLeaves - 1; i++) {
+       loserTree.insert(INT_MAX, false);
+
+       buffer[key].push(loserTree.popMax());
+
+       if (buffer[key].size() == blockSize) {
+           outputIndex.push(key);
+           // cout << key << "buffer,ouputæ—¶å®¹é‡ä¸ºï¼š" << buffer[key].size() << endl;
+           cv_output.notify_one();
+
+           cv_avail.wait(lock, [] {return !availableIndex.empty(); });
+           key = availableIndex.front();
+           availableIndex.pop();
+       }
+   }
+   outputIndex.push(key);
+   // cout << key << "buffer,ouputæ—¶å®¹é‡ä¸ºï¼š" << buffer[key].size() << endl;
+   outputIndex.push(-1);
+}
+
+int main() {
+   string inputFileName = "large_data.txt";  // è¾“å…¥æ•°æ®æ–‡ä»¶å
+   ifstream inputFile(inputFileName);
+   if (!inputFile.is_open()) {
+       cerr << "æ— æ³•æ‰“å¼€è¾“å…¥æ–‡ä»¶: " << inputFileName << endl;
+       return 0;
+   }
+   fs::remove_all(outputDir);  
+   fs::create_directory(outputDir);
+   for(int i = 0;i < 3;i++)
+       availableIndex.push(i);
+
+
+   vector<thread> threads(3);
+   threads[0] = thread(readDataBlock, ref(inputFile));
+   threads[1] = thread(generateInitialRuns);
+   threads[2] = thread(writeDataOut);
+
+   for (auto& t : threads) {
+       t.join();
+   }
+
+   cout << "é¡ºä¸²ç”Ÿæˆå®Œæˆï¼Œæ€»å…±ç”Ÿæˆäº† " << runIndex + 1 << " ä¸ªé¡ºä¸²æ–‡ä»¶ã€‚" << "å…±" << totalSum << "æ¡æ•°æ®" << endl;
+   return 0;
+}
